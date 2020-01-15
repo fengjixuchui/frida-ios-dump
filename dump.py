@@ -23,7 +23,8 @@ from scp import SCPClient
 from tqdm import tqdm
 import traceback
 
-if sys.version_info[0] < 3:
+IS_PY2 = sys.version_info[0] < 3
+if IS_PY2:
     reload(sys)
     sys.setdefaultencoding('utf8')
 
@@ -96,7 +97,11 @@ def on_message(message, data):
     last_sent = [0]
 
     def progress(filename, size, sent):
-        t.desc = os.path.basename(filename).decode("utf-8")
+        baseName = os.path.basename(filename)
+        if IS_PY2:
+            t.desc = baseName.decode("utf-8")
+        else:
+            t.desc = baseName
         t.total = size
         t.update(sent - last_sent[0])
         last_sent[0] = 0 if size == sent else sent
@@ -287,7 +292,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='frida-ios-dump (by AloneMonkey v2.0)')
     parser.add_argument('-l', '--list', dest='list_applications', action='store_true', help='List the installed apps')
     parser.add_argument('-o', '--output', dest='output_ipa', help='Specify name of the decrypted IPA')
+    parser.add_argument('-H', '--host', dest='ssh_host', help='Specify SSH hostname')
+    parser.add_argument('-p', '--port', dest='ssh_port', help='Specify SSH port')
+    parser.add_argument('-u', '--user', dest='ssh_user', help='Specify SSH username')
+    parser.add_argument('-P', '--password', dest='ssh_password', help='Specify SSH password')
     parser.add_argument('target', nargs='?', help='Bundle identifier or display name of the target app')
+
     args = parser.parse_args()
 
     exit_code = 0
@@ -304,6 +314,15 @@ if __name__ == '__main__':
     else:
         name_or_bundleid = args.target
         output_ipa = args.output_ipa
+        # update ssh args
+        if args.ssh_host:
+            Host = args.ssh_host
+        if args.ssh_port:
+            Port = int(args.ssh_port)
+        if args.ssh_user:
+            User = args.ssh_user
+        if args.ssh_password:
+            Password = args.ssh_password
 
         try:
             ssh = paramiko.SSHClient()
@@ -318,10 +337,12 @@ if __name__ == '__main__':
             if session:
                 start_dump(session, output_ipa)
         except paramiko.ssh_exception.NoValidConnectionsError as e:
-            print(e) 
+            print(e)
+            print('Try specifying -H/--hostname and/or -p/--port')
             exit_code = 1
         except paramiko.AuthenticationException as e:
-            print(e) 
+            print(e)
+            print('Try specifying -u/--username and/or -P/--password')
             exit_code = 1
         except Exception as e:
             print('*** Caught exception: %s: %s' % (e.__class__, e))
